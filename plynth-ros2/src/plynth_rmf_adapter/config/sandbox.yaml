@@ -1,0 +1,9 @@
+# The elevators and doors to present to Open-RMF, by their Plynth IDs (GET /v1/places): each one's name in Open-RMF
+# is its Plynth ID. These are the sandbox's, with two of its scenario places: door-closed is always closed, to see a
+# refusal, and lift-recall goes into fire service recall 3 s after the robot boards.
+# The gateway's address, the robot's ID and its secret come from the environment, never from here: GATEWAY_URL,
+# GATEWAY_ROBOT_ID, GATEWAY_ROBOT_SECRET, and in a building GATEWAY_TLS_PIN.
+plynth_rmf_adapter:
+  ros__parameters:
+    lifts: [lift, lift-recall]
+    doors: [door, secure-door, door-closed]
