@@ -59,6 +59,11 @@ building's gateway `GATEWAY_TLS_PIN`.
 - `plynth/grade.py`: the sandbox's grade of your own software, and its certificate. A company's own keys only.
 - `plynth/watch.py`: a robot kept connected and held when the building says so. With `pose=` it sends positions,
   which need a company's own keys: a test key from `/docs` may not send them (403).
+- `plynth/ask.py`: the building for a model, over MCP (stdio): `plynth-ask`, with the robot's settings in the
+  environment. It reads the robot's places, directions, notices and every rule (`GET /v1/rules`), and says what the
+  robot is here for. With `--acts`, for your robot's own model running on the robot, it also asks for doors, elevator
+  rides and crossings and reports what the robot did, as the robot itself; the building's rules decide each one.
+  Without it, it never acts, so it's safe for a person's assistant.
 - `gateway/`: the kit's old name, kept so commands written for it (`python3 -m gateway.conformance`) still work.
 
 ## Version and license

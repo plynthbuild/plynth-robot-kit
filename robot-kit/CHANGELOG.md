@@ -2,6 +2,9 @@
 
 ## 0.4.0, 2026-10-25
 
+- The building for a model: `plynth.ask` (`plynth-ask`), an MCP server over stdio that reads a robot's places,
+  directions, notices and every rule (`GET /v1/rules`) for its own model. With `--acts` the model also asks for doors,
+  elevator rides and crossings and reports what the robot did; without it, it never acts.
 - One-way keys. `RobotClient`'s secret may be the robot's Ed25519 private key, as `ssh-keygen` writes it or in
   PEM (this needs the `cryptography` library), or a function that signs bytes and returns the 64-byte signature, such as the robot's key store or
   security chip, so the private key never sits in Python. The same string is signed, the signature sent in hex.

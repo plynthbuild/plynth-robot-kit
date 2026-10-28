@@ -427,7 +427,7 @@ class RobotClient:
 
 class PersonClient(RobotClient):
     """One of the building's own people on the operator side (/ops), under their own sign-in, for software that acts
-    for that person alone, such as their own AI's MCP server (gateway.ask_people): it sees what their role sees and
+    for that person alone, such as their own AI's MCP server (plynth.ask_people): it sees what their role sees and
     nothing more. token: a session from signing in; or person and password, to sign in on the first call and again
     when the session ends (a session lasts one shift). The same TLS checks as a robot's: pin= or cafile=."""
 
