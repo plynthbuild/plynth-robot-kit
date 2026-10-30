@@ -51,7 +51,7 @@ e-stop and a person with its remote. A robot whose software doesn't follow it ca
 
 ## Use it with the sandbox
 
-1. Install the robot kit's client: `pip install https://sandbox.plynth.build/docs/kit/plynth_robot_kit-0.4.0-py3-none-any.whl`
+1. Install the robot kit's client: `pip install https://sandbox.plynth.build/docs/kit/plynth_robot_kit-0.5.0-py3-none-any.whl`
    (on Ubuntu 24.04, add `--break-system-packages`).
 2. Copy `src/plynth_ros_example` and `src/plynth_rmf_adapter` into your workspace's `src/`. For the adapter,
    `apt install ros-jazzy-rmf-lift-msgs ros-jazzy-rmf-door-msgs`. Then `colcon build`.

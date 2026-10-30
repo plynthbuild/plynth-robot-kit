@@ -1,5 +1,15 @@
 # Changelog: the Plynth robot kit
 
+## 0.5.0, 2026-10-30
+
+- High-security doors. `RobotClient.ask_grant(doors, work_order=..., note=..., minutes=...)` asks for one trip through
+  doors that ask for a grant per trip, and `grants()` lists this robot's, waiting or in force; a person at the building
+  approves, and each door opens once on it. `presence(passage_id, code)` sends the door's code, as its beacon shows it,
+  for a passage waiting in `AWAITING_PRESENCE`; or send `door_code=` in `request()` itself.
+- ECDSA P-256 keys. `RobotClient`'s secret may also be a P-256 private key in PEM, the curve TPMs and security chips
+  use and a maker's device certificate (IEEE 802.1AR) carries: signed over SHA-256, the signature DER. A signing
+  function may return DER or r and s side by side (64 bytes), as a chip gives them.
+
 ## 0.4.0, 2026-10-25
 
 - The building for a model: `plynth.ask` (`plynth-ask`), an MCP server over stdio that reads a robot's places,

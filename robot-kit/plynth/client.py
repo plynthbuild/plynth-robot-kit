@@ -20,6 +20,8 @@ a request more than 30 seconds off the gateway's clock is refused as a replay.
 A one-way key instead (the building keeps only its public half): pass, as `secret`, the robot's Ed25519 private
 key, as ssh-keygen writes it or in PEM (this needs the cryptography library), or a function that signs bytes and returns the 64-byte
 signature, such as the robot's own key store or security chip, so the private key never sits in Python at all.
+An ECDSA P-256 private key works the same way (the curve TPMs and security chips use, and a maker's device
+certificate carries): signed over SHA-256, the signature DER, or r and s side by side, 64 bytes, from a chip.
 The same string is signed; X-Signature carries the signature in hex.
 
 Fail closed: if the gateway doesn't answer within your timeout, treat it as "not authorized" and use your
@@ -100,9 +102,13 @@ class RobotClient:
             context.check_hostname, context.verify_mode = False, ssl.CERT_NONE  # the pin is the check
         if isinstance(secret, str) and secret.lstrip().startswith("-----BEGIN"):  # a one-way key's private half:
             from cryptography.hazmat.primitives import serialization  # as ssh-keygen writes it, or PEM
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import ec
             load = (serialization.load_ssh_private_key if "OPENSSH PRIVATE KEY" in secret
                     else serialization.load_pem_private_key)
-            secret = load(secret.encode(), password=None).sign
+            key = load(secret.encode(), password=None)
+            secret = ((lambda message: key.sign(message, ec.ECDSA(hashes.SHA256())))
+                      if isinstance(key, ec.EllipticCurvePrivateKey) else key.sign)
         self.base_url, self.robot_id, self.secret = base_url.rstrip("/"), robot_id, secret
         self.pin = pin and ",".join("sha256:" + p.strip().lower().removeprefix("sha256:").replace(":", "")
                                     for p in pin.split(","))
@@ -124,6 +130,21 @@ class RobotClient:
     def report(self, passage_id, event):
         """"boarded" or "exited" for a ride, "passed" for a door. Only your report completes a passage."""
         return self.call("POST", f"/v1/passages/{passage_id}/report", {"event": event})
+
+    def presence(self, passage_id, code):
+        """At a high-security door that asks for proof the robot is there (state AWAITING_PRESENCE): the door's code,
+        as its beacon shows it now. Or send it as door_code in request() itself."""
+        return self.call("POST", f"/v1/passages/{passage_id}/presence", {"code": code})
+
+    def ask_grant(self, doors, work_order=None, note="", minutes=None):
+        """A grant for one trip through high-security doors that ask for one: a person at the building approves it,
+        then each door opens once on it. Poll grants() for its status."""
+        return self.call("POST", "/v1/grants", {"doors": doors, "note": note,
+                                                **({"work_order": work_order} if work_order else {}),
+                                                **({"minutes": minutes} if minutes else {})})
+
+    def grants(self):
+        return self.call("GET", "/v1/grants")["grants"]
 
     def passages(self, since=None):
         """This robot's passages not yet ended, as statuses; with `since` (unix time, a day back at most) also those
