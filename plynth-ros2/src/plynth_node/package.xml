@@ -4,9 +4,9 @@
   <name>plynth_node</name>
   <version>0.1.0</version>
   <description>
-    A ROS 2 robot connected to a building through Plynth's robot API: it sends where the robot is, holds it when the
-    building says so (/plynth/stop, for a twist_mux lock), and tells it the keep-out zones. Needs the plynth package
-    from Plynth's robot kit (pip install the kit's wheel).
+    A ROS 2 robot connected to a building through Plynth's robot API: it sends where the robot is (its localizer's
+    pose, in its own map), holds it when the building says so (/plynth/hold, for a twist_mux lock), and tells it the
+    keep-out zones. Needs the plynth package from Plynth's robot kit (pip install the kit's wheel).
   </description>
   <maintainer email="studio@plynth.build">Plynth</maintainer>
   <license file="LICENSE">Apache-2.0</license>

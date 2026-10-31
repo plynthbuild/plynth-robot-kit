@@ -1,5 +1,47 @@
 # Changelog: the Plynth robot kit
 
+## 0.6.0, 2026-10-30
+
+- Signing. `RobotClient` signs each call with a new nonce and the gateway's host as its audience (`X-Nonce`,
+  `X-Audience`, in the signed string between the timestamp and the body), with a shared secret or a one-way key alike.
+  A building set up from a site file requires both, and refuses a copy of a call and a call signed for another
+  building; the sandbox takes calls without them too. Against a gateway older than them, which answers
+  `signature_mismatch` without the `nonces` a newer one's 401 carries, the client signs once more without them, as
+  0.5.0 and older do, and so does every call after; a wrong key stays a mismatch.
+- `call(..., key=...)` sends an `Idempotency-Key` with a call that makes something (help, a report, a charger, a permit,
+  an incident, a booking, a handoff, a pass, the front desk's form), and keeps it when it signs the call again: sent
+  again within the day, it's answered as the first was and nothing is made twice.
+- Crossings. `report(passage_id, "going", clearance=status["clearance"]["token"])` reads a crossing's clearance back
+  by its token, as a building requires; move only once the answer is `GOING`. Any other answer raises `GatewayError`
+  409, with the passage's `state`, `reason_code`, `retry` and `retry_after` in its `body`. `request(...,
+  approach="west")` names the side of a crossing the robot waits on.
+- The stream. `stream()`'s timeout is 5 s by default (it was 30): a gateway of this release sends a keep-alive every
+  2 s, so 5 s of silence means the connection is gone. Against an older gateway, which sends one every 15 s, pass
+  `timeout=20`.
+- `plynth.watch` reopens a stream that goes 5 s without a byte (`READ_S`), and reads its notices at once when an
+  answer's `hold` says otherwise than its stream did. "Clear and hold" is clear, then hold: the robot clears any doorway,
+  car or no-stop area it's in under its own navigation, then says so with `watch.holding()`, which tells the building
+  and holds it; `watch.clearing` says what it's clearing for meanwhile. One that hasn't said so within the notice's
+  `clear_in_s` (10 s at most, `watch.CLEAR_S`) is held anyway. A hold or a stay put still holds at once. A robot whose
+  stream the building refuses (suspended, or its company stopped) is held until a stream opens again.
+  `Watch(..., on_passage=...)` is called with each step of the robot's passages. A position the gateway refuses is
+  logged once and is still word from the gateway; a 5xx, a gateway up but failing, is no answer.
+- `plynth.ask` answers as data too (`structuredContent`, from MCP 2025-06-18 on). With `--acts`, its report tool sends
+  a crossing's clearance token, and its words tell a model that a clearance lasts 20 seconds, to move at a crossing
+  only once the answer to its `going` is `GOING`, and to leave crossings to the robot's own motion software when it
+  takes more than a few seconds a turn.
+- `plynth.conformance` records a check it couldn't run as skipped, with `passed` null, never as passed; a run where
+  nothing ran neither passed nor failed (exit 1), and the sandbox is told only of runs where something ran.
+- The ROS 2 node (`plynth-ros2.zip`). In a building, `plynth_node` sends your localizer's pose in your own map by
+  default (`amcl_pose`, a `PoseWithCovarianceStamped`, frame `map`), which the building places from spots you both
+  know; started at a building with odometry or the floor plate's calibration (`origin_x`, `origin_z`, `yaw`), it
+  refuses to start, since wheel odometry drifts a robot into a false "lost" hold. On the sandbox its defaults are
+  0.3.0's, odometry on the plate, with a warning. It follows the floor its ride arrives at. Holds go out on
+  `/plynth/hold`; `/plynth/stop`, the old name, says the same for now and will be retired. A clear and hold waits for
+  true on `/plynth/holding`, or its `clear_in_s`. `vendor:=unitree` has left the node, which refuses it at start: the
+  kit sends no maker's motion or posture commands, so act on `/plynth/hold` in your own software (Plynth keeps the old
+  code as an example for a maker or company to adapt and own: ask support@plynth.build).
+
 ## 0.5.0, 2026-10-30
 
 - High-security doors. `RobotClient.ask_grant(doors, work_order=..., note=..., minutes=...)` asks for one trip through

@@ -13,9 +13,12 @@
             ...  # board car data["car"], then robot.report(passage_id, "boarded")
 
 Standard library only, so it can be copied into a fleet's own code as it stands. Every call but health is
-signed with the robot's own secret: hex HMAC-SHA256 over "METHOD\\nPATH\\nTIMESTAMP\\n" followed by the exact
-body bytes, sent as X-Robot-Id, X-Timestamp (unix seconds) and X-Signature. Keep the robot's clock on NTP:
-a request more than 30 seconds off the gateway's clock is refused as a replay.
+signed with the robot's own secret: hex HMAC-SHA256 over "METHOD\\nPATH\\nTIMESTAMP\\nNONCE\\nAUDIENCE\\n"
+followed by the exact body bytes, sent as X-Robot-Id, X-Timestamp (unix seconds), X-Nonce (new for each call),
+X-Audience (the gateway's host, as in the URL you give) and X-Signature. A copy of a call is refused, and so is a
+call signed for another building; a building requires both, and the sandbox takes calls without them too. A gateway
+older than them is signed for without them (call). Keep the robot's clock on NTP: a request more than 30 seconds off
+the gateway's clock is refused as a replay.
 
 A one-way key instead (the building keeps only its public half): pass, as `secret`, the robot's Ed25519 private
 key, as ssh-keygen writes it or in PEM (this needs the cryptography library), or a function that signs bytes and returns the 64-byte
@@ -37,6 +40,7 @@ import hashlib
 import hmac
 import http.client
 import json
+import secrets
 import select
 import ssl
 import threading
@@ -110,6 +114,8 @@ class RobotClient:
             secret = ((lambda message: key.sign(message, ec.ECDSA(hashes.SHA256())))
                       if isinstance(key, ec.EllipticCurvePrivateKey) else key.sign)
         self.base_url, self.robot_id, self.secret = base_url.rstrip("/"), robot_id, secret
+        self.audience = url.netloc.rpartition("@")[2]  # the gateway's host as this robot reaches it, port included
+        self.bound = True  # each call signs a nonce and the audience; False once a gateway older than them answers (call)
         self.pin = pin and ",".join("sha256:" + p.strip().lower().removeprefix("sha256:").replace(":", "")
                                     for p in pin.split(","))
         self.timeout, self.context, self.observer, self.test_run = timeout, context, observer, test_run
@@ -121,15 +127,19 @@ class RobotClient:
 
     def request(self, passage_id, resource_id, **fields):
         """Ask to pass. Pick a new passage_id per trip (a UUID is best); resending the same request is safe.
-        For an elevator, send from_floor and to_floor; ride_alone=True asks for a car to itself, where allowed."""
+        For an elevator, send from_floor and to_floor; ride_alone=True asks for a car to itself, where allowed.
+        For a crossing, approach= the side the robot waits on (its directions' passage gives it), its line there."""
         return self.call("POST", "/v1/passages", {"passage_id": passage_id, "resource_id": resource_id, **fields})
 
     def status(self, passage_id):
         return self.call("GET", f"/v1/passages/{passage_id}")
 
-    def report(self, passage_id, event):
-        """"boarded" or "exited" for a ride, "passed" for a door. Only your report completes a passage."""
-        return self.call("POST", f"/v1/passages/{passage_id}/report", {"event": event})
+    def report(self, passage_id, event, clearance=None):
+        """"boarded" or "exited" for a ride, "passed" for a door or a crossing. Only your report completes a passage.
+        At a crossing's CLEARED, "going" with clearance=status["clearance"]["token"] reads the clearance back; move
+        only once the answer is GOING."""
+        return self.call("POST", f"/v1/passages/{passage_id}/report",
+                         {"event": event, **({"clearance": clearance} if clearance is not None else {})})
 
     def presence(self, passage_id, code):
         """At a high-security door that asks for proof the robot is there (state AWAITING_PRESENCE): the door's code,
@@ -290,10 +300,10 @@ class RobotClient:
     def health(self):
         return self.call("GET", "/v1/health", signed=False)
 
-    def stream(self, timeout=30, after=None):
+    def stream(self, timeout=5, after=None):
         """Yield (event, data) as they happen: "passage" (a step of one of this robot's passages, shaped like
         a status) and "notices" (the whole list, at once on connecting and whenever it changes). The gateway
-        sends a keep-alive every 15 s, so `timeout` seconds of silence means the connection is gone.
+        sends a keep-alive every 2 s, so `timeout` seconds of silence means the connection is gone: reconnect.
         after: pick up where a dropped stream left off; the steps missed since come first (at most 500 of the last
         day). Each event's ID is kept in self.last_event_id, so a robot reconnects with:
 
@@ -340,25 +350,41 @@ class RobotClient:
 
     # --- the wire ---
 
-    def call(self, method, path, body=None, signed=True, timestamp=None):
+    def call(self, method, path, body=None, signed=True, timestamp=None, key=None):
         """One signed call; returns the JSON answer or raises GatewayError. `timestamp` is for tests only.
         Calls from one thread reuse its connection while the gateway keeps it open, so a check-in every second or
         two makes no new handshake. Nothing is ever resent, but after a 429, which the gateway did nothing with: it's
-        sent again after its Retry-After while the waiting stays within wait_429 seconds."""
+        sent again after its Retry-After while the waiting stays within wait_429 seconds. And once after a gateway
+        older than X-Nonce and X-Audience refuses them, as a signature mismatch it did nothing with and without the
+        "nonces" a newer gateway's 401 carries: signed without them, and if that works, so is every call after
+        (stream and fetch too). A wrong key stays a mismatch.
+        ponytail: for the sandbox until its first release that takes them (kit 0.5.0 and older sign without); drop it
+        once no gateway is older.
+        key: an Idempotency-Key (a UUID) for a call that makes something: help, a report, a charger, a permit, an
+        incident, a booking, a handoff, a pass, the front desk's form. Sent again with the same key within a day, after
+        a timeout say, the call is answered as the first was, and nothing is made twice."""
         waited = 0
         while True:
             try:
-                return self._call_once(method, path, body, signed, timestamp)
+                return self._call_once(method, path, body, signed, timestamp, key)
             except GatewayError as e:
+                if (signed and self.bound and e.status == 401 and isinstance(e.body, dict)
+                        and e.body.get("code") == "signature_mismatch" and not e.body.get("nonces")):
+                    self.bound = False
+                    try:
+                        return self._call_once(method, path, body, signed, timestamp, key)
+                    except GatewayError:
+                        self.bound = True  # not that: a wrong key, or a building's refusal of the old way
+                        raise e from None
                 if e.status != 429 or e.retry_after is None or waited + e.retry_after > self.wait_429:
                     raise
                 time.sleep(e.retry_after)
                 waited += e.retry_after
 
-    def _call_once(self, method, path, body, signed, timestamp):
+    def _call_once(self, method, path, body, signed, timestamp, key=None):
         conn = self._connection()
         try:
-            response = self._send(conn, method, path, body, signed, timestamp)
+            response = self._send(conn, method, path, body, signed, timestamp, {"Idempotency-Key": key} if key else None)
             data = response.read()
         except urllib.error.URLError:
             conn.close()
@@ -395,9 +421,11 @@ class RobotClient:
             {"X-Robot-Observer": "1"} if self.observer else {}) | ({"X-Test-Run": self.test_run} if self.test_run else {})
         path = self._url.path.rstrip("/") + path  # what's sent is what's signed, a prefix in the gateway's URL too
         if signed:
-            ts = str(int(time.time()) if timestamp is None else timestamp)
-            message = f"{method}\n{path}\n{ts}\n".encode() + raw
+            ts, nonce = str(int(time.time()) if timestamp is None else timestamp), secrets.token_hex(16)
+            bound = f"{nonce}\n{self.audience}\n" if self.bound else ""  # without, as 0.5.0 and older sign: an older gateway
+            message = f"{method}\n{path}\n{ts}\n{bound}".encode() + raw
             headers |= {"X-Robot-Id": self.robot_id, "X-Timestamp": ts,
+                        **({"X-Nonce": nonce, "X-Audience": self.audience} if self.bound else {}),
                         "X-Signature": self.secret(message).hex() if callable(self.secret)
                         else hmac.new(self.secret.encode(), message, hashlib.sha256).hexdigest()}
         try:

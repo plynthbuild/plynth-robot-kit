@@ -1,6 +1,9 @@
-# twist_mux with Plynth's hold as a lock (plynth_node): while /plynth/stop says true, or says nothing for 0.5 s (the node
-# stopped, or lost its way), every velocity input below the lock's priority is held at zero. Put your own inputs here;
-# keep a person's joystick above the lock's priority only if your safety case says so.
+# twist_mux with Plynth's hold as a lock (plynth_node): while /plynth/hold says true, or says nothing for 0.5 s (the
+# node stopped, or lost its way), twist_mux passes none of the velocity inputs below the lock's priority: it sends
+# nothing for them, so the base stops on its own command timeout (or at once with plynth_node's zero_twist). A software
+# hold you install by choice, inside your robot and beneath its own safety layer: never a safety function. Put your own
+# inputs here; keep a person's joystick above the lock's priority only if your safety case says so. A config of your
+# own that locks on plynth/stop, the old name, still works: the node says both.
 #   ros2 run twist_mux twist_mux --ros-args --params-file config/twist_mux.yaml -r cmd_vel_out:=cmd_vel
 # "/**": whatever the robot's namespace (/robot1/twist_mux, as in a fleet), its topics resolving inside it.
 /**:
@@ -15,6 +18,6 @@
         priority: 10
     locks:
       plynth:
-        topic: plynth/stop
+        topic: plynth/hold
         timeout: 0.5
         priority: 100

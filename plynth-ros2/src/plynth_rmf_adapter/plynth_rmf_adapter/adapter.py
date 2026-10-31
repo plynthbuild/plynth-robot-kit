@@ -14,7 +14,8 @@ A lift session:
   3. Aboard, the robot asks for "<to>" (or "<to>:<to>"): reported boarded, and the car goes.
   4. It arrives: at <to>, door open.
   5. Out, END_SESSION: reported exited. Before boarding, END_SESSION cancels the call.
-A door asked open is a door passage, open once Plynth says go through; asked closed, it's reported passed.
+A door asked open is a door passage, open once Plynth says go through, never while the door is only unlocked; asked
+closed, it's reported passed.
 In a car or a doorway the adapter checks in each second, which also asks the car to hold its doors a little longer.
 
 Refused, a lift or door doesn't serve the robot, and the log says why. Open-RMF's fleet adapter looks at a lift's floor,
@@ -289,8 +290,11 @@ class Adapter(Node):
             msg.motion_state = self.motion(ride) if serving else LiftState.MOTION_STOPPED
             self.lift_states.publish(msg)
         for door in self.doors:  # Plynth keeps a door passage open through an alarm: the robot holds until it's over
+            # open where the door's position switch read it open, or it says nothing: a badge door only unlocked
+            # ("unlocked", on the badge system's word) may still be shut
             go = not (self.fire or emergency) and any(
-                self.state(e) == "OPEN_COMMANDED" for (d, _), e in self.passes.items() if d == door)
+                self.state(e) == "OPEN_COMMANDED" and e["status"].get("door") in (None, "opened")
+                for (d, _), e in self.passes.items() if d == door)
             mode = DoorMode.MODE_OFFLINE if not self.online else DoorMode.MODE_OPEN if go else DoorMode.MODE_CLOSED
             self.door_states.publish(DoorState(door_time=now, door_name=door, current_mode=DoorMode(value=mode)))
 

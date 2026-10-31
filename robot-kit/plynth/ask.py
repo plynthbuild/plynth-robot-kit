@@ -29,7 +29,11 @@ from urllib.parse import quote
 
 from plynth.client import GatewayError, RobotClient
 
-VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")  # MCP versions this speaks, newest first
+VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")  # MCP versions with a handshake, newest first
+# MCP 2026-07-28 has none (the robotics review, 2026-10-29): each request names its version in _meta, server/discover
+# says what's spoken, and every result says resultType; a list's says how long to keep it (ttlMs, cacheScope).
+STATELESS, META = "2026-07-28", "io.modelcontextprotocol/"
+UNSTRUCTURED = ("2025-03-26", "2024-11-05")  # before structuredContent (2025-06-18): the text alone
 DEMO_KEYS = Path.home() / "Library/Application Support/Robot Gateway/demo.db.robots.json"  # the Dock app's demo (Plynth.app; its
 # data folder kept its first name, so the demo's data stayed put when the app was renamed)
 INSTRUCTIONS = ("You are asking a building's gateway questions as one robot, with that robot's own key, so you see "
@@ -92,8 +96,9 @@ TOOLS = {  # name: (title, description, input schema, the robot API call)
                  None, lambda robot, args: robot.visits()),
     "directions": ("The way there", "How to get somewhere in the building from where this robot is: the doors and "
                    "elevators to ask for in order, where to wait for each and where it comes out, the areas to keep "
-                   "out of, and the same in plain words. Only through what "
-                   "this robot may use now; if there's no way, why not. Use it for 'how do I get to the service "
+                   "out of, and the same in plain words. Only through what this robot may use on the trip, judged "
+                   "over its half hour: each passage's `waits` says what to wait for there (a line, a rule about to "
+                   "open); if there's no way, why not, and when to ask again. Use it for 'how do I get to the service "
                    "elevators?' or 'which way to the lab?'.", WHERE,
                    lambda robot, args: robot.directions(args.get("to"), args.get("from"), args.get("floor"))),
     "say": ("Tell the building", "Say in plain words what this robot is here for or needs ('bringing lab samples to "
@@ -118,6 +123,10 @@ SERVER = ("ask-the-building", INSTRUCTIONS, TOOLS, TALKS)  # name, instructions,
 PASSAGE = {"type": "object", "required": ["resource_id"], "properties": {
     "resource_id": {"type": "string", "description": "The door, elevator or crossing, by its ID from 'places' or "
                                                      "'directions'"},
+    "passage_id": {"type": "string", "description": "Your own ID for this trip, 1-128 letters, digits, '.', '-' or "
+                                                    "'_' (a UUID is best): ask again with the same one after no answer, "
+                                                    "and it's the same trip, never a second; a new one for each new "
+                                                    "trip. Left out, one is made"},
     "from_floor": {"type": "string", "description": "An elevator ride: the floor it gets on at"},
     "to_floor": {"type": "string", "description": "An elevator ride: the floor it gets off at"},
     "wait_in_line": {"type": "boolean", "description": "An elevator: wait in line rather than be refused while it's "
@@ -125,28 +134,43 @@ PASSAGE = {"type": "object", "required": ["resource_id"], "properties": {
 STEP = {"type": "object", "required": ["passage_id", "event"], "properties": {
     "passage_id": {"type": "string"},
     "event": {"type": "string", "enum": ["going", "passed", "ready", "boarded", "exited", "assisted"],
-              "description": "going: read a crossing's clearance back, before moving; passed: through a door or a "
+              "description": "going: read a crossing's clearance back within 20 seconds of CLEARED, only as the robot "
+                             "starts through; passed: through a door or a "
                              "crossing; ready: at the elevator lobby on its turn; boarded, exited: into and out of a "
-                             "car; assisted: a person helped it through"}}}
+                             "car; assisted: a person helped it through"},
+    "clearance": {"type": "string", "description": "going: the clearance's token, as CLEARED gave it in "
+                                                   "clearance.token; a building refuses a readback without it"}}}
 ONE = {"type": "object", "required": ["passage_id"], "properties": {"passage_id": {"type": "string"}}}
 
 
 def _ask_for(robot, args):
     fields = {k: args[k] for k in ("from_floor", "to_floor", "wait_in_line") if args.get(k) is not None}
-    return robot.request(str(uuid.uuid4()), args.get("resource_id"), **fields)
+    return robot.request(args.get("passage_id") or str(uuid.uuid4()), args.get("resource_id"), **fields)
 
 
+# A crossing's clearance is read back by whatever moves the robot, only as it moves (core: a clearance not read back in
+# 20 s is void, so a robot that asked early or went quiet never holds the crossing; only one that said it's going can
+# leave it closed, STUCK, for a person). The tool never says going for the model (the robotics review's follow-up,
+# 2026-10-30: doing so let a model slower than the passage timeout close crossings): a model that takes more than a
+# few seconds a turn leaves crossings to the robot's own motion software, which asks, reads back and moves.
 ACTS = {
     "ask": ("Ask to go through", "Ask the building for a door, an elevator ride or a crossing, as this robot. The "
-            "answer is the passage, with its passage_id and state. Move only on OPEN_COMMANDED (a door: go through, "
-            "then report passed), CAR_ARRIVED (board and report boarded; get out at ARRIVED and report exited) or, at a "
-            "crossing, once you've reported going on CLEARED and it's answered (then report passed once through). "
-            "IN_LINE: wait where you are, out of the way. DENIED: read reason_code, retry and retry_after.",
+            "answer is the passage, with its passage_id and state; give your own passage_id to ask again safely. Move "
+            "only on OPEN_COMMANDED (a door: go through, then report passed), CAR_ARRIVED (board and report boarded; "
+            "get out at ARRIVED and report exited) or, at a crossing, once you've reported going on CLEARED and the "
+            "answer is GOING (then report passed once through). CLEARED lasts 20 seconds: report going only as the robot "
+            "starts through, and if you can't within that, let it lapse and ask again. A robot whose model takes "
+            "longer than a few seconds a turn should leave crossings to its own motion software. IN_LINE: wait where "
+            "you are, out of the way. DENIED: read reason_code, retry and retry_after.",
             PASSAGE, _ask_for),
     "report": ("Say what the robot did", "Tell the building what this robot just did in a passage: going (read a "
-               "crossing's clearance back, before moving), passed, ready, boarded, exited or assisted. Only what it "
-               "did.", STEP, lambda robot, args: robot.report(args.get("passage_id"), args.get("event"))),
-    "passage": ("A passage now", "One of this robot's passages, as it stands now.", ONE,
+               "crossing's clearance back, with the clearance's token, within 20 seconds of CLEARED, as it starts "
+               "through), passed, ready, "
+               "boarded, exited or assisted. Only what it did.", STEP,
+               lambda robot, args: robot.report(args.get("passage_id"), args.get("event"),
+                                                clearance=args.get("clearance"))),
+    "passage": ("A passage now", "One of this robot's passages, as it stands now, with expires_in_s: the seconds left "
+                "before its state lapses on its own (a crossing's clearance: 20).", ONE,
                 lambda robot, args: robot.status(args.get("passage_id"))),
     "withdraw": ("Withdraw", "Withdraw a passage this robot no longer needs, before it boards or goes in.", ONE,
                  lambda robot, args: robot.cancel(args.get("passage_id"))),
@@ -158,7 +182,8 @@ ACT_INSTRUCTIONS = ("You run one robot in a building, with that robot's own key.
                     "fire alarm always win, and the robot's own safety comes first. Say times in the building's local "
                     "time.")
 ACTING = ("ask-the-building", ACT_INSTRUCTIONS, TOOLS | ACTS, TALKS | set(ACTS))
-_peer = {"capabilities": {}, "lines": iter(()), "waiting": [], "asked": 0}  # the client on stdio, as serve() reads it
+_peer = {"capabilities": {}, "lines": iter(()), "waiting": [], "asked": 0,  # the client on stdio, as serve() reads it
+         "version": None}  # the version its handshake settled on, if it made one
 
 
 def confirm(message):
@@ -192,32 +217,47 @@ def handle(message, connect, server=SERVER):
         return None  # notifications (initialized, cancelled) take no answer
     if not isinstance(params, dict):
         return _error(mid, -32602, "params must be an object")
-    name = params.get("name")
+    name, meta = params.get("name"), params.get("_meta")
+    asked = meta.get(f"{META}protocolVersion") if isinstance(meta, dict) else None  # 2026-07-28: on every request
+    if asked is not None and asked not in (STATELESS, *VERSIONS):
+        return _error(mid, -32022, f"unsupported protocol version: {asked!r}",
+                      {"supported": [STATELESS, *VERSIONS], "requested": asked})
+    me = {"name": label, "version": "0.1.0"}
     if method == "initialize":
         can = params.get("capabilities")
         _peer["capabilities"] = can if isinstance(can, dict) else {}
-        asked = params.get("protocolVersion")
-        result = {"protocolVersion": asked if asked in VERSIONS else VERSIONS[0], "capabilities": {"tools": {}},
-                  "serverInfo": {"name": label, "version": "0.1.0"}, "instructions": instructions}
+        wanted = params.get("protocolVersion")
+        _peer["version"] = wanted if wanted in VERSIONS else VERSIONS[0]
+        result = {"protocolVersion": _peer["version"], "capabilities": {"tools": {}}, "serverInfo": me,
+                  "instructions": instructions}
+    elif method == "server/discover":  # who it is goes in _meta (below), as 2026-07-28 has it; cacheable, as a list is
+        result = {"supportedVersions": [STATELESS, *VERSIONS], "capabilities": {"tools": {}},
+                  "instructions": instructions, "ttlMs": 3_600_000, "cacheScope": "public"}
     elif method == "ping":
         result = {}
     elif method == "tools/list":
         result = {"tools": [{"name": name, "title": title, "description": about,
                              "inputSchema": schema or {"type": "object"},
                              "annotations": TALK if name in talks else READ_ONLY}
-                            for name, (title, about, schema, _) in tools.items()]}
+                            for name, (title, about, schema, _) in tools.items()],
+                  **({"ttlMs": 3_600_000, "cacheScope": "public"} if asked == STATELESS else {})}  # fixed for a run
     elif method == "tools/call" and isinstance(name, str) and name in tools:
         args = params.get("arguments") or {}
-        result = call(connect, name, args, tools) if isinstance(args, dict) else _text(
+        structured = asked is not None or _peer.get("version") not in UNSTRUCTURED
+        result = call(connect, name, args, tools, structured) if isinstance(args, dict) else _text(
             "Can't ask: arguments must be an object", error=True)
     elif method == "tools/call":
         return _error(mid, -32602, f"unknown tool: {name!r}")
     else:
         return _error(mid, -32601, f"unknown method: {method}")
+    if asked == STATELESS or method == "server/discover":  # every result says it's complete, and who answered
+        result |= {"resultType": "complete", "_meta": {f"{META}serverInfo": me}}
     return {"jsonrpc": "2.0", "id": mid, "result": result}
 
 
-def call(connect, name, args, tools=TOOLS):
+def call(connect, name, args, tools=TOOLS, structured=True):
+    """A tool's answer: the robot API's own JSON as text, and beside it, from MCP 2025-06-18 on, as structuredContent
+    (an object there: a list as {"result": [...]}), which a planner's function calling reads best."""
     try:
         answer = tools[name][3](connect(), args)
     except GatewayError as e:
@@ -226,7 +266,8 @@ def call(connect, name, args, tools=TOOLS):
         return _text(f"The building didn't answer ({e!r}). Treat that as not authorized.", error=True)
     except (KeyError, ValueError) as e:
         return _text(f"Can't ask: {e}", error=True)
-    return _text(json.dumps(answer, indent=1))
+    return _text(json.dumps(answer, indent=1)) | (
+        {"structuredContent": answer if isinstance(answer, dict) else {"result": answer}} if structured else {})
 
 
 def respond(message, connect, server=SERVER):
@@ -239,8 +280,8 @@ def respond(message, connect, server=SERVER):
                       f"internal error: {type(e).__name__}")
 
 
-def _error(mid, code, text):
-    return {"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": text}}
+def _error(mid, code, text, data=None):
+    return {"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": text, **({"data": data} if data else {})}}
 
 
 def _text(text, error=False):
@@ -280,7 +321,7 @@ def main():
 def serve(connect, server=SERVER, stdin=None):
     """MCP over stdio until stdin closes."""
     lines = iter(stdin if stdin is not None else sys.stdin)
-    _peer.update(lines=lines, waiting=[], capabilities={})
+    _peer.update(lines=lines, waiting=[], capabilities={}, version=None)
     while (line := _peer["waiting"].pop(0) if _peer["waiting"] else next(lines, None)) is not None:
         if not line.strip():  # stdout carries only JSON-RPC; anything else goes to stderr
             continue

@@ -4,4 +4,4 @@ and held when the building says so (plynth.watch), and the building for a robot'
 (plynth.ask), standard-library Python 3.9 or later.
 
 Copyright 2026 PLYNTH 3D Inc. Licensed under the Apache License, Version 2.0 (LICENSE)."""
-__version__ = "0.5.0"
+__version__ = "0.6.0"

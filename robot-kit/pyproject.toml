@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plynth-robot-kit"
-version = "0.5.0"
+version = "0.6.0"
 description = "The reference client and conformance check for Plynth's robot API"
 readme = "README.md"
 license = {text = "Apache-2.0"}

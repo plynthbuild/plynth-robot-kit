@@ -32,6 +32,15 @@ TRIES = 3              # asks, when a refusal says waiting can help
 LONGEST_WAIT_S = 60    # a longer retry_after is the building saying "not now": give up and plan another way
 DOOR_WAIT_S = 150      # a door where a person approves robots waits up to two minutes
 CAR_WAIT_S = 120
+# A ride that ended with the robot maybe still in the car says what the robot does there (aboard_action); a value this
+# node doesn't know is "get out".
+ABOARD_ACTION = {
+    "stay put": "Aboard, and the ride ended in a fault: stay put in the car until a person comes",
+    "get out at your floor": "Aboard, and the building lost the car: get out only at your own floor, by your own "
+                             "sensing, where the car stops with its doors open, then hold clear of them",
+    "get out": "Aboard, and the ride didn't arrive: get out only where the car stops with its doors open, then hold "
+               "clear of them, as the building's notices say",
+}
 
 
 class Ride(Node):
@@ -124,9 +133,8 @@ class Ride(Node):
         self.get_logger().info(f"Boarding car {status['car']} on floor {self.from_floor}")  # drive in here
         status = self.show(self.robot.report(passage, "boarded"))
         status = self.wait_for(passage, "ARRIVED", status, CAR_WAIT_S, aboard=True)
-        if status["state"] != "ARRIVED":  # aboard, a ride is never cancelled: only a fire alarm or recall ends it
-            self.get_logger().error("Aboard, and the ride didn't arrive: get out only where the car stops with its "
-                                    "doors open, then hold clear of them, as the building's notices say")
+        if status["state"] != "ARRIVED":  # aboard, a ride is never cancelled: the building ended it
+            self.get_logger().error(ABOARD_ACTION.get(status.get("aboard_action"), ABOARD_ACTION["get out"]))
             return False
         self.get_logger().info(f"Getting out on floor {self.to_floor}")  # drive out here
         return self.show(self.robot.report(passage, "exited"))["state"] == "RELEASED"

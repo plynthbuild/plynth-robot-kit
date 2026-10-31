@@ -446,7 +446,8 @@ CHECKS = [
 
 
 def run(robot, door, elevator, from_floor, to_floor, robot_answers=False):
-    """Every check in order: [{"check", "passed", "evidence"}], "skipped" (why) on one that can't run here. A failed
+    """Every check in order: [{"check", "passed", "evidence"}], and on one that can't run here "skipped" (why) with
+    passed null: it neither passed nor failed (the robotics review, 2026-10-29: skips were recorded as passed). A failed
     check doesn't stop the rest."""
     a = argparse.Namespace(door=door, elevator=elevator, from_floor=str(from_floor), to_floor=str(to_floor),
                            robot_answers=robot_answers)
@@ -455,10 +456,10 @@ def run(robot, door, elevator, from_floor, to_floor, robot_answers=False):
         try:
             results.append({"check": name, "passed": True, "evidence": check(robot, a)})
         except Skipped as e:
-            results.append({"check": name, "passed": True, "skipped": str(e), "evidence": None})
+            results.append({"check": name, "passed": None, "skipped": str(e), "evidence": None})
         except GatewayError as e:
             if _limited_key(e):
-                results.append({"check": name, "passed": True, "skipped": e.body["error"], "evidence": None})
+                results.append({"check": name, "passed": None, "skipped": e.body["error"], "evidence": None})
             else:  # the failure is the evidence
                 results.append({"check": name, "passed": False, "evidence": f"{type(e).__name__}: {e}"})
         except Exception as e:  # the failure is the evidence
@@ -466,7 +467,7 @@ def run(robot, door, elevator, from_floor, to_floor, robot_answers=False):
     return results
 
 
-KIT_VERSION = "0.5.0"  # the test kit's own version (docs/api/kit/CHANGELOG.md), written into every report
+KIT_VERSION = "0.6.0"  # the test kit's own version (docs/api/kit/CHANGELOG.md), written into every report
 
 
 def main(argv=None):
@@ -521,24 +522,25 @@ def main(argv=None):
     except (GatewayError, OSError):
         versions = {"release": None, "api": None}
     results = run(robot, args.door, args.elevator, args.from_floor, args.to_floor, args.robot_answers)
-    failed = [r for r in results if not r["passed"]]
-    if sandbox:  # the sandbox counts the runs that pass, true or false and nothing else; never this run's result
+    failed = [r for r in results if r["passed"] is False]
+    skipped = [r for r in results if "skipped" in r]
+    ran = len(results) - len(skipped)
+    passed = not failed if ran else None  # a run where nothing ran neither passed nor failed
+    if sandbox and ran:  # the sandbox counts the runs that pass, true or false and nothing else; never this run's result
         try:
-            robot.call("POST", "/v1/sandbox/conformance", {"passed": not failed})
+            robot.call("POST", "/v1/sandbox/conformance", {"passed": passed})
         except (GatewayError, OSError):
             pass
-    skipped = [r for r in results if "skipped" in r]
     print(f"Conformance: {args.url} as {args.robot}, {started:%Y-%m-%d %H:%M %Z}"
           f" (kit {KIT_VERSION}, gateway {versions['release'] or 'unknown'}, API v{versions['api'] or '?'})")
     for r in results:
         print(f"  {'SKIP' if 'skipped' in r else 'PASS' if r['passed'] else 'FAIL'}  {r['check']}")
-        if not r["passed"] or "skipped" in r:
+        if r["passed"] is not True:
             print(f"        {r.get('skipped') or r['evidence']}")
         elif isinstance(r["evidence"], dict) and r["evidence"].get("scheme") == "http":
             print("        plain HTTP on your own computer; anywhere else the gateway is HTTPS, verified")
         elif isinstance(r["evidence"], dict) and r["evidence"].get("answered_by") == "the kit":
             print("        the kit answered for your robot; add --robot-answers to test your own software")
-    ran = len(results) - len(skipped)
     print(f"{ran - len(failed)} of {ran} passed" + (f", {len(skipped)} skipped (they can't run with this key or here)"
                                                     if skipped else "") + (f", {len(failed)} failed." if failed else "."))
     if args.report:
@@ -546,9 +548,9 @@ def main(argv=None):
             json.dump({"gateway": args.url, "robot": args.robot, "time": started.isoformat(timespec="seconds"),
                        "kit": KIT_VERSION, "gateway_release": versions["release"], "api": versions["api"],
                        "door": args.door, "elevator": args.elevator, "ride": [args.from_floor, args.to_floor],
-                       "passed": not failed, "checks": results}, f, indent=2)
+                       "passed": passed, "checks": results}, f, indent=2)
         print(f"Report: {args.report}")
-    return 0 if not failed else 1
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

@@ -38,7 +38,9 @@ adapter reads the same `adapter_door_requests`, so each requester's passage is i
 
 ## A door
 
-Asked open (`MODE_OPEN`), the door is a door passage, and `door_states` shows it open once Plynth says go through.
+Asked open (`MODE_OPEN`), the door is a door passage, and `door_states` shows it open once Plynth says go through and
+the door opened (`door` `opened`, or a door that doesn't say). A badge door Plynth only unlocked (`door` `unlocked`)
+stays shown closed: it may still be shut.
 Asked closed, the adapter reports `passed`, or cancels a passage not yet let through.
 
 ## Check-ins and asking again
@@ -67,7 +69,8 @@ the same passage ID, so a slow or restarting gateway never gets a second car cal
 - **Where the car is.** Plynth tells a robot about its own rides, never where a car is. `current_floor` is the floor of
   the last step this adapter saw (the pickup at `CAR_ARRIVED`, the destination at `ARRIVED`), `""` before its first
   ride. `motion_state` is up or down while its robot rides, unknown while the car comes for it.
-- **Doors.** Open means Plynth said go through (`OPEN_COMMANDED`); Plynth doesn't report where the door is. Asked
+- **Doors.** Open means Plynth said go through (`OPEN_COMMANDED`) and the door's position switch read it open, or
+  the door said nothing; one only unlocked shows closed, since Plynth can't say it opened. Asked
   closed after that, the adapter reports `passed`: Open-RMF doesn't say whether the robot went through.
 - **Modes, and why the door shuts with them.** `MODE_FIRE` while the fire alarm is on or the elevator is in fire
   recall; `MODE_EMERGENCY` while any other emergency is in the robot's notices, on any floor; `MODE_OFFLINE` when the
