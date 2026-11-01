@@ -282,7 +282,10 @@ class RobotClient:
         return self.call("GET", f"/v1/directions?{query}")
 
     def position(self, floor, x, z):
-        """Optional: where the robot is now, x and z from 0 to 1 across the floor plate. Never logged."""
+        """Optional: where the robot is now, x and z from 0 to 1 across the floor plate. Live on the owner's screen for
+        15 s, and kept as the robot's trail (a point each metre it moves or floor it changes to, with its time),
+        outside the record, until the owner deletes it or the period they set ends; the owner can switch it off. Your
+        company sees its own robots' trails, no other company's. Refused (403) with a sandbox test key."""
         return self.call("POST", "/v1/position", {"floor": floor, "x": x, "z": z})
 
     def online(self, battery=None, state=None, software=None):
@@ -294,7 +297,7 @@ class RobotClient:
         return self.call("POST", "/v1/heartbeat", body)
     def map_position(self, floor, map_x, map_y):
         """Optional: where the robot is in your fleet's own map, in metres, once the building has placed that map
-        on its floor plate (a frame for your company, on this floor or every floor). Never logged."""
+        on its floor plate (a frame for your company, on this floor or every floor). Kept as position()'s are."""
         return self.call("POST", "/v1/position", {"floor": floor, "map_x": map_x, "map_y": map_y})
 
     def health(self):

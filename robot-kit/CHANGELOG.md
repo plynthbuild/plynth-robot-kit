@@ -1,5 +1,16 @@
 # Changelog: the Plynth robot kit
 
+## 0.6.1, 2026-10-31
+
+- `position()` and `map_position()` say what the building keeps. They said "Never logged." A position is live on the
+  owner's screen for 15 s, and since 2026-10-31 it's also kept as the robot's trail (a point each metre it moves or
+  floor it changes to, with its time), outside the record, until the owner deletes it or the period they set ends; the
+  owner can switch it off. Your company sees its own robots' trails, no other company's. A sandbox test key's positions
+  are refused (403), as before.
+- The ROS 2 node's README installs this version's wheel. The sandbox serves only the current version's, so its link to
+  0.6.0's would answer 404 beside 0.6.1.
+- Nothing the kit sends or does changes.
+
 ## 0.6.0, 2026-10-30
 
 - Signing. `RobotClient` signs each call with a new nonce and the gateway's host as its audience (`X-Nonce`,
