@@ -14,15 +14,17 @@ Nothing to install: unzip it and run it. Or `pip install` the wheel from the san
    python3 -m plynth.hello --env ../plynth-sandbox.env
    ```
 
-   It says whether the gateway accepts the key, whose robot it is, whether your clock is right, and which doors and
-   elevators the robot may use.
+   It says whether the gateway accepts the key, whose robot it is, whether your clock is right, which doors and
+   elevators the robot may use, and what the building has from it beyond its trips: its position, battery, software
+   version, size, key and serial, and what it hasn't yet.
 3. **Run the conformance check:**
 
    ```
    python3 -m plynth.conformance --env ../plynth-sandbox.env --report conformance.json
    ```
 
-   It rides the elevator, goes through the door, runs the emergency drills, and prints PASS, SKIP or FAIL for each
+   It rides the elevator, goes through the door, runs the emergency drills (a test key skips those, saying why:
+   they come with a company's own keys), and prints PASS, SKIP or FAIL for each
    check. Against the sandbox it uses the sandbox's door and elevator; in a building, name them (`--door`,
    `--elevator`, `--from`, `--to`): there it really opens them. Add `--robot-answers` to have your own software, not
    the kit, answer the drills: that's the result a building wants.
@@ -66,8 +68,8 @@ gateway on a building's own computer `GATEWAY_TLS_PIN`.
   5 s, and reads its notices at once when an answer's `hold` says otherwise than its stream did, so a Hold reaches the
   robot within seconds even on a stream that died without a word. A stream refused (401, 403: the robot suspended,
   its company stopped) holds the robot until a stream opens again. Against a gateway from before this release, set
-  `plynth.watch.READ_S = 20`, or it reopens its stream every few seconds. With `pose=` it sends positions, which need
-  a company's own keys: a test key from `/docs` may not send them (403). A clear and hold is clear, then hold: your
+  `plynth.watch.READ_S = 20`, or it reopens its stream every few seconds. With `pose=` it sends positions: a test key
+  from `/docs` sends one a second, shown on its own page only; a company's own keys more, a building's in full. A clear and hold is clear, then hold: your
   robot clears any doorway, car or area it's in, then calls `watch.holding()`, which confirms holding and holds it;
   one that hasn't within the notice's `clear_in_s` (10 s at most) is held anyway.
 - `plynth/ask.py`: the building for a model, over MCP (stdio): `plynth-ask`, with the robot's settings in the

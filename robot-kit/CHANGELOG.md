@@ -1,5 +1,20 @@
 # Changelog: the Plynth robot kit
 
+## 0.6.2, 2026-11-12
+
+- `plynth.hello` says what the building has from your robot beyond its trips, and what it hasn't yet: a live
+  position, its battery, its software version, its size, that it confirms emergencies, a one-way key and a serial
+  signed for. From `GET /v1/me`'s new `shares`; against an older gateway it prints neither line.
+- `position()` and `map_position()` take `heading` (radians, anticlockwise from east seen from above; with
+  `map_position()`, in your own map, as VDA 5050's theta) and `speed` (metres a second). Each optional, and live only.
+- `online()`'s state may be `manual` (a person is driving it) or `stopped` (its stop is pressed, or its own safety has
+  stopped it), beside idle, working, charging and error.
+- `plynth.grade` prints what your robot shares, beside the level: its position as it moves, a heartbeat with its
+  battery and software version, and its size on file. A certificate says `visible` when all three passed.
+- A sandbox test key may send its robot's position, one a second, so `plynth.watch` with `pose=` runs with one. Its
+  position shows on its own page and nowhere else: no trail, and no hold in a keep-out zone. Drills, help, the profile
+  and grading still come with a company's own keys. The ROS 2 node's README says so.
+
 ## 0.6.1, 2026-10-31
 
 - `position()` and `map_position()` say what the building keeps. They said "Never logged." A position is live on the

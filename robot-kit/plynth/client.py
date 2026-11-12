@@ -281,24 +281,32 @@ class RobotClient:
         query = urllib.parse.urlencode({k: v for k, v in (("to", to), ("from", frm), ("floor", floor)) if v is not None})
         return self.call("GET", f"/v1/directions?{query}")
 
-    def position(self, floor, x, z):
+    def position(self, floor, x, z, heading=None, speed=None):
         """Optional: where the robot is now, x and z from 0 to 1 across the floor plate. Live on the owner's screen for
         15 s, and kept as the robot's trail (a point each metre it moves or floor it changes to, with its time),
         outside the record, until the owner deletes it or the period they set ends; the owner can switch it off. Your
-        company sees its own robots' trails, no other company's. Refused (403) with a sandbox test key."""
-        return self.call("POST", "/v1/position", {"floor": floor, "x": x, "z": z})
+        company sees its own robots' trails, no other company's. heading: which way it faces, in radians anticlockwise
+        from the plan's east seen from above (east 0, north pi/2); speed: metres a second. Each optional, and live
+        only, never in the trail. A sandbox test key sends one position a second, shown on its own page and nowhere else."""
+        more = {k: v for k, v in (("heading", heading), ("speed", speed)) if v is not None}
+        return self.call("POST", "/v1/position", {"floor": floor, "x": x, "z": z, **more})
 
     def online(self, battery=None, state=None, software=None):
         """Still here, between other calls (about every 30 s), with the battery (0 to 1) and state (idle, working,
-        charging or error) if you have them. Any signed call counts; 60 s without one shows the robot offline.
+        charging, error, manual: a person is driving it, or stopped: its stop is pressed or its own safety has stopped
+        it) if you have them. Any signed call counts; 60 s without one shows the robot offline.
         software: the robot's software version (40 characters at most); when it changes, the owner is asked to
         rerun its conformance test."""
         body = {k: v for k, v in (("battery", battery), ("state", state), ("software", software)) if v is not None}
         return self.call("POST", "/v1/heartbeat", body)
-    def map_position(self, floor, map_x, map_y):
+
+    def map_position(self, floor, map_x, map_y, heading=None, speed=None):
         """Optional: where the robot is in your fleet's own map, in metres, once the building has placed that map
-        on its floor plate (a frame for your company, on this floor or every floor). Kept as position()'s are."""
-        return self.call("POST", "/v1/position", {"floor": floor, "map_x": map_x, "map_y": map_y})
+        on its floor plate (a frame for your company, on this floor or every floor). Kept as position()'s are.
+        heading: in your own map too, radians anticlockwise from its x axis (VDA 5050's theta, ROS's yaw), which the
+        gateway turns into the building's; speed: metres a second."""
+        more = {k: v for k, v in (("heading", heading), ("speed", speed)) if v is not None}
+        return self.call("POST", "/v1/position", {"floor": floor, "map_x": map_x, "map_y": map_y, **more})
 
     def health(self):
         return self.call("GET", "/v1/health", signed=False)

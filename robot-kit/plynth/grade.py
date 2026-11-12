@@ -55,10 +55,19 @@ def main(argv=None):
             print(f"        {line}")
         if c["result"] != "passed":
             print(f"        to show it: {c['how']}")
+    if g.get("shares"):  # a sandbox since 2026-11-12: what the building has from it beyond its trips
+        print("What it shares, beside the level:")
+        for c in g["shares"]:
+            print(f"  {MARK[c['result']]}  {c['title']}")
+            for line in c["evidence"][:3]:
+                print(f"        {line}")
+            if c["result"] != "passed":
+                print(f"        to show it: {c['how']}")
     print("Not graded yet: " + "; ".join(g["not_graded"]) + ".")
     if g["certificate"]:
         cert = g["certificate"]
-        print(f"Sandbox-verified. Certificate {cert['id']}: {url.rstrip('/')}/docs/certificates/{cert['id']}")
+        print(f"Sandbox-verified{', and visible' if cert.get('visible') else ''}. Certificate {cert['id']}:"
+              f" {url.rstrip('/')}/docs/certificates/{cert['id']}")
         return 0
     print("Not sandbox-verified yet: fix what failed, show what wasn't seen, then grade again.")
     return 1

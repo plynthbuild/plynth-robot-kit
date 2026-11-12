@@ -7,19 +7,21 @@ unchanged.
 
 | Package | Executable | What it is |
 |---|---|---|
-| `plynth_node` | `plynth_node` | The robot node: where the robot is (in a building, its localizer's pose in your own map; on the sandbox, its odometry on the floor plate), the building's holds on `/plynth/hold` for a twist_mux lock, and the keep-out zones. Start here, with your company's own keys: it sends positions, which a sandbox test key may not (403). |
+| `plynth_node` | `plynth_node` | The robot node: where the robot is (in a building, its localizer's pose in your own map; on the sandbox, its odometry on the floor plate), the building's holds on `/plynth/hold` for a twist_mux lock, and the keep-out zones. Start here, with your company's own keys: a sandbox test key sends its position, but not the rest the node does. |
 | `plynth_ros_example` | `ride` | Walks through a door, then rides an elevator, from one node. The example to read. |
 | `plynth_rmf_adapter` | `adapter` | An Open-RMF lift and door adapter: lift sessions and door requests become Plynth passages. Its protocol and limits are in [its README](src/plynth_rmf_adapter/README.md). |
 
 ## plynth_node
 
-It needs a company's own key: a test key from the sandbox's `/docs` rides and uses the doors only, so its positions
-are refused (403, `not_for_this_key`). `ride` and the adapter work with either.
+It needs a company's own key. A test key from the sandbox's `/docs` rides, uses the doors and sends its position, one
+a second, shown on its own page only: no keep-out zone holds it. Its answers to emergencies and its requests for help
+are refused (403, `not_for_this_key`). `ride` and the
+adapter work with either.
 
 On the sandbox, which places your odometry on the floor plate, as it has since kit 0.3.0:
 
 ```
-set -a; . ./plynth-sandbox.env; set +a   # GATEWAY_URL, GATEWAY_ROBOT_ID and GATEWAY_ROBOT_SECRET
+set -a; . ./plynth-sandbox.env; set +a
 ros2 run plynth_node plynth_node --ros-args -p pose_topic:=/odom -p origin_x:=0.5 -p origin_z:=0.5
 ros2 run twist_mux twist_mux --ros-args --params-file $(ros2 pkg prefix plynth_node)/share/plynth_node/config/twist_mux.yaml -r cmd_vel_out:=cmd_vel
 ```
@@ -48,7 +50,7 @@ lost. A building refuses both at start. `origin_x` and `origin_z` (0 to 1) say w
 plate, `yaw` (radians) how far your x axis is turned anticlockwise from the plate's x, east, seen from above, as ROS
 turns, and the plate's size comes from the building (or set `plate_w_m` and `plate_d_m`). Your +y is north, the
 plate's z runs south. A point off the plate isn't sent. With `frame:=map` these five are refused at start, since your
-map doesn't use them. To try the building's way on the sandbox, ask Plynth to place your map, then add
+map doesn't use them. To try the building's way on the sandbox, place your map on your company's page (Your Map), then add
 `-p frame:=map`: the pose's defaults follow the frame, your localizer's on `amcl_pose` in a map.
 
 **Holding.** `/plynth/hold` (`std_msgs/Bool`) goes out `hold_hz` (4) times a second: true while the robot must hold.
@@ -93,7 +95,7 @@ support@plynth.build for it.
 
 ## Use it with the sandbox
 
-1. Install the robot kit's client: `pip install https://sandbox.plynth.build/docs/kit/plynth_robot_kit-0.6.1-py3-none-any.whl`
+1. Install the robot kit's client: `pip install https://sandbox.plynth.build/docs/kit/plynth_robot_kit-0.6.2-py3-none-any.whl`
    (on Ubuntu 24.04, add `--break-system-packages`).
 2. Copy `src/plynth_ros_example` and `src/plynth_rmf_adapter` into your workspace's `src/`. For the adapter,
    `apt install ros-jazzy-rmf-lift-msgs ros-jazzy-rmf-door-msgs`. Then `colcon build`.
@@ -105,7 +107,7 @@ Or in Docker: put the kit's wheel next to the `Dockerfile` and `docker build -t 
 ## ride
 
 ```
-set -a; . ./plynth-sandbox.env; set +a   # GATEWAY_URL, GATEWAY_ROBOT_ID and GATEWAY_ROBOT_SECRET
+set -a; . ./plynth-sandbox.env; set +a
 ros2 run plynth_ros_example ride --ros-args -p door:=door -p elevator:=lift -p from_floor:=1 -p to_floor:=2
 ```
 

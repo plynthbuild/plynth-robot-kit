@@ -1,5 +1,5 @@
 """Check a robot's key in one step, before anything else: does the gateway accept it, whose robot is it, is the clock
-right, and which doors and elevators may it use.
+right, which doors and elevators may it use, and what the building has from it beyond its trips.
 
     python3 -m plynth.hello --env ../plynth-sandbox.env  # from inside robot-kit: the file that comes with each key
     GATEWAY_URL=... GATEWAY_ROBOT_ID=... GATEWAY_ROBOT_SECRET=... python3 -m plynth.hello  # or the environment
@@ -43,6 +43,25 @@ def env_file(path):
                 key, value = line.split("=", 1)
                 out[key.strip().removeprefix("export ").strip()] = value.strip().strip('"').strip("'")
     return out
+
+
+def shared(me):
+    """What the building has from this robot beyond its trips, and what it hasn't yet, as two lists of words: from
+    `GET /v1/me`'s `shares` and its key and serial. ([], []) from a gateway older than `shares`."""
+    s = me.get("shares")
+    if not isinstance(s, dict):
+        return [], []
+    at = s.get("position")
+    rows = [
+        (at and at.get("live"), f"its position, live on floor {at['floor']}" if at else "", "a live position (POST /v1/position)"),
+        (s.get("battery") is not None, f"its battery, {round((s.get('battery') or 0) * 100)}%", "its battery (POST /v1/heartbeat)"),
+        (s.get("software"), f"its software version, {s.get('software')}", "its software version (POST /v1/heartbeat)"),
+        (s.get("profile"), "its size", "its size (POST /v1/profile, or its model's spec sheet)"),
+        (s.get("emergency"), "that it confirms emergencies", 'that it confirms emergencies ("emergency": true in its profile)'),
+        (me.get("one_way_key"), "a one-way key", "a one-way key (your company's page)"),
+        (me.get("serial_confirmed"), "its serial, signed for", "a serial signed for (your company's page)"),
+    ]
+    return [has for ok, has, _ in rows if ok], [lacks for ok, _, lacks in rows if not ok]
 
 
 def main(argv=None):
@@ -95,6 +114,12 @@ def main(argv=None):
     if places:
         print("It may use: " + "; ".join(f"{p['id']} ({p['name']}, floor{'s' if len(p.get('floors') or []) > 1 else ''} "
                                          f"{', '.join(p.get('floors') or [])})" for p in places) + ".")
+    has, lacks = shared(me)
+    if has:
+        print("The building has from it: " + "; ".join(has) + ".")
+    if lacks:
+        print("Not yet: " + "; ".join(lacks) + "." + (" A test key shares its position and battery; the rest come"
+                                                      " with your company's own keys." if me["id"].startswith("visitor-") else ""))
     print(f"Next: python3 -m plynth.conformance{f' --env {a.env}' if a.env else ''}  (it rides the elevator and goes"
           " through the door, and says what passed)")
     return 0
