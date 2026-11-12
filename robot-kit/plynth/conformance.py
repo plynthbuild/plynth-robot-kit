@@ -467,7 +467,7 @@ def run(robot, door, elevator, from_floor, to_floor, robot_answers=False):
     return results
 
 
-KIT_VERSION = "0.6.2"  # the test kit's own version (docs/api/kit/CHANGELOG.md), written into every report
+KIT_VERSION = "0.6.3"  # the test kit's own version (docs/api/kit/CHANGELOG.md), written into every report
 
 
 def main(argv=None):

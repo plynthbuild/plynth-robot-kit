@@ -136,22 +136,29 @@ class PlynthNode(Node):
             return False
 
     def _listen_pose(self, topic, kind):
+        speed = None  # only odometry says how fast it's going
         if kind == "odometry":
             from nav_msgs.msg import Odometry as Msg
-            get = lambda m: m.pose.pose.position  # noqa: E731
+            get = lambda m: m.pose.pose  # noqa: E731
+            speed = lambda m: math.hypot(m.twist.twist.linear.x, m.twist.twist.linear.y)  # noqa: E731
         elif kind == "pose":
             from geometry_msgs.msg import PoseStamped as Msg
-            get = lambda m: m.pose.position  # noqa: E731
+            get = lambda m: m.pose  # noqa: E731
         elif kind == "pose_cov":
             from geometry_msgs.msg import PoseWithCovarianceStamped as Msg
-            get = lambda m: m.pose.pose.position  # noqa: E731
+            get = lambda m: m.pose.pose  # noqa: E731
         else:
             raise ValueError("pose_type is pose_cov, pose or odometry")
 
         def got(msg):
-            point = get(msg)
+            pose = get(msg)
+            point, q = pose.position, pose.orientation
+            # which way it faces: the pose's yaw, anticlockwise from its frame's x axis (REP 103). A quaternion never
+            # set (all zeros) says nothing
+            facing = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)) if any(
+                (q.x, q.y, q.z, q.w)) else None
             with self.lock:
-                self.at = (point.x, point.y, msg.header.frame_id)
+                self.at = (point.x, point.y, msg.header.frame_id, facing, speed(msg) if speed else None)
         # AMCL keeps its last pose for a subscriber that asks (transient_local, as Nav2's nav2_simple_commander
         # asks), so a node started beside a robot standing still is told where it is, not when it next moves
         # ponytail: by the topic's name; read the publishers' QoS (get_publishers_info_by_topic) if a localizer
@@ -174,8 +181,10 @@ class PlynthNode(Node):
         return (float(size[0]), float(size[1]))
 
     def _where(self):
-        """(floor, x, z) on the plate, ("map", floor, x, y) in the fleet's map, or None: before the first pose, for a
-        pose in another frame than the map's, and off the plate."""
+        """(floor, x, z) on the plate, ("map", floor, x, y) in the fleet's map, each followed by its heading and speed
+        where the pose gives them (plynth.watch sends them with the position), or None: before the first pose, for a
+        pose in another frame than the map's, and off the plate. A heading is in the map's own frame with "map", and
+        turned by `yaw` onto the plate's, anticlockwise from east, with x and z."""
         with self.lock:
             at = self.at
         if at is None:  # a launch file written for another pose, or no localizer yet: said, never silent
@@ -189,7 +198,8 @@ class PlynthNode(Node):
                 return self._warn(f"A pose in {at[2]}, not {self.map_frame}: not sent. Send your localizer's pose, in"
                                   " your map's frame (map_frame)")
             self._warn(None)
-            return ("map", floor, at[0], at[1])
+            more = {k: v for k, v in (("heading", at[3]), ("speed", at[4])) if v is not None}
+            return ("map", floor, at[0], at[1], *([more] if more else []))
         if not all(self.plate):
             return None
         c, s = math.cos(self.yaw), math.sin(self.yaw)  # x east and y north (REP 103); the plate's z runs north to south
@@ -199,7 +209,9 @@ class PlynthNode(Node):
             return self._warn(f"The robot is off the plate (x {x:.2f}, z {z:.2f}): not sent. Check origin_x, origin_z,"
                               " yaw and the plate's size")
         self._warn(None)
-        return (floor, x, z)
+        more = {k: v for k, v in (("heading", None if at[3] is None else math.remainder(at[3] + self.yaw, 2 * math.pi)),
+                                  ("speed", at[4])) if v is not None}
+        return (floor, x, z, *([more] if more else []))
 
     def _warn(self, text):
         """A warning, once until it changes (poses arrive many times a second); None, for _where."""

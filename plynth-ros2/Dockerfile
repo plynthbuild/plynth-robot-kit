@@ -1,5 +1,5 @@
 # Plynth's ROS 2 packages: the ride example, the Open-RMF lift and door adapter, and the robot node, built in /ws.
-# ROS 2 Jazzy by default; Humble with --build-arg ROS_DISTRO=humble (what Unitree recommends). test.sh copies the robot
+# ROS 2 Jazzy by default; Humble with --build-arg ROS_DISTRO=humble. test.sh copies the robot
 # kit's wheel here, builds this, and runs all three against a local sandbox.
 ARG ROS_DISTRO=jazzy
 FROM ros:${ROS_DISTRO}-ros-base

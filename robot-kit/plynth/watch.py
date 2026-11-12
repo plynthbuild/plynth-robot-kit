@@ -91,7 +91,8 @@ class Watch:
                  on_passage=None):
         """robot: a RobotClient. on_hold(held, why): called when what the robot must do changes, why a list of reasons
         ("lost the gateway" among them when it's the link). pose(): (floor, x, z), or ("map", floor, map_x, map_y), or
-        None for not now. every: seconds between positions (or heartbeats). on_notices(notices): every change of them.
+        None for not now; either may end with {"heading": radians, "speed": metres a second}, each optional, sent with
+        the position (heading: anticlockwise from the plan's east with x and z, in your own map with "map"). every: seconds between positions (or heartbeats). on_notices(notices): every change of them.
         on_passage(step): each step of the robot's passages as the stream gives it (a ride's has `arrived`, the floor
         it came to). An error in any is logged, never the end of the stream or of the watch's decisions; on_hold is
         called again a quarter second later until it takes what the robot must do."""
@@ -236,10 +237,12 @@ class Watch:
         while not self._stop.is_set():
             try:
                 at = self.pose() if self.pose else None
+                more = at[-1] if at and isinstance(at[-1], dict) else {}  # its heading and speed, where pose() gives them
+                at = at[:-1] if more else at
                 if at and at[0] == "map":
-                    answer = self.robot.map_position(*at[1:])
+                    answer = self.robot.map_position(*at[1:], **more)
                 elif at:
-                    answer = self.robot.position(*at)
+                    answer = self.robot.position(*at, **more)
                 else:
                     answer = self.robot.online()
                 self._heard_now()

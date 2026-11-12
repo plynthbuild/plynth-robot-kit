@@ -41,7 +41,8 @@ both know; until then the building refuses them (400), and the node's log says w
 sent: one whose header names another frame than `map_frame` (`map`) isn't, since odometry's frame drifts. After a ride,
 the node takes the floor the car arrived at, as the building records it; `ros2 param set /plynth_node floor 3` sets it
 by hand. If no pose has come 5 s after the node starts, its log says what it listens for: a launch file for another
-topic or message type sends nothing.
+topic or message type sends nothing. With each position the node sends which way the robot faces, the pose's own yaw,
+and from odometry how fast it's going: the building's screen draws it facing that way, standing still too.
 
 **On the sandbox**, the node's defaults are kit 0.3.0's, so launch files written for them keep working there:
 odometry (`pose_type` `odometry`, a `nav_msgs/Odometry` on `odom`) placed on the floor plate by hand (`frame` `plate`),
@@ -95,7 +96,7 @@ support@plynth.build for it.
 
 ## Use it with the sandbox
 
-1. Install the robot kit's client: `pip install https://sandbox.plynth.build/docs/kit/plynth_robot_kit-0.6.2-py3-none-any.whl`
+1. Install the robot kit's client: `pip install https://sandbox.plynth.build/docs/kit/plynth_robot_kit-0.6.3-py3-none-any.whl`
    (on Ubuntu 24.04, add `--break-system-packages`).
 2. Copy `src/plynth_ros_example` and `src/plynth_rmf_adapter` into your workspace's `src/`. For the adapter,
    `apt install ros-jazzy-rmf-lift-msgs ros-jazzy-rmf-door-msgs`. Then `colcon build`.

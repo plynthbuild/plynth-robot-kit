@@ -68,7 +68,7 @@ gateway on a building's own computer `GATEWAY_TLS_PIN`.
   5 s, and reads its notices at once when an answer's `hold` says otherwise than its stream did, so a Hold reaches the
   robot within seconds even on a stream that died without a word. A stream refused (401, 403: the robot suspended,
   its company stopped) holds the robot until a stream opens again. Against a gateway from before this release, set
-  `plynth.watch.READ_S = 20`, or it reopens its stream every few seconds. With `pose=` it sends positions: a test key
+  `plynth.watch.READ_S = 20`, or it reopens its stream every few seconds. With `pose=` it sends positions, with the robot's `heading` and `speed` where your pose gives them: a test key
   from `/docs` sends one a second, shown on its own page only; a company's own keys more, a building's in full. A clear and hold is clear, then hold: your
   robot clears any doorway, car or area it's in, then calls `watch.holding()`, which confirms holding and holds it;
   one that hasn't within the notice's `clear_in_s` (10 s at most) is held anyway.

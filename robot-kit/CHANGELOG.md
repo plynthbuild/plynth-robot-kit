@@ -1,5 +1,15 @@
 # Changelog: the Plynth robot kit
 
+## 0.6.3, 2026-11-12
+
+- `plynth.watch`: `pose()` may end with `{"heading": radians, "speed": metres a second}`, each optional, and the watch
+  sends them with the position. A gateway older than them takes the position and ignores both.
+- The ROS 2 node `plynth_node` sends them: which way the robot faces, from its pose's orientation (its yaw, turned by
+  the `yaw` parameter onto the plate where its frame is set by hand, and as it stands in its own map where the building
+  has placed that), and from odometry how fast it's going. The building's screen draws a robot facing the way it says.
+- The ROS 2 packages' Dockerfile no longer names a robot maker.
+- Nothing else the kit sends or does changes.
+
 ## 0.6.2, 2026-11-12
 
 - `plynth.hello` says what the building has from your robot beyond its trips, and what it hasn't yet: a live
